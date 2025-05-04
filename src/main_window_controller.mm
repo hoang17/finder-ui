@@ -10,7 +10,7 @@ static const NSToolbarItemIdentifier kToggleSidebarItemIdentifier =
     @"NSToolbarToggleSidebarItemIdentifier"; // Fixed identifier
 static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
     @"NSToolbarSidebarTrackingSeparatorItemIdentifier"; // Fixed identifier
-static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
+// Removed custom new tab toolbar item; rely on native "+" button instead.
 
 @interface MainWindowController ()
 
@@ -18,9 +18,9 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
 - (void)setupSplitViewController;
 // Private helper to configure the NSToolbar.
 - (void)setupToolbar;
-// Action to create a new tab
-- (void)newTab:(id)sender;
-// Helper to set up the main menu for tab support
+// Action for native "+" button (NSResponder). Implementing this shows the button.
+- (void)newWindowForTab:(id)sender;
+// Helper to ensure File > New Tab exists
 - (void)setupMainMenu;
 
 @end
@@ -57,10 +57,9 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
         window.tabbingMode = NSWindowTabbingModePreferred;
         window.tabbingIdentifier = @"MainWindowTabs"; // Group windows of this type
         
-        // Force the tab bar to be visible by creating a second tab immediately
-        // This will make the tab bar appear
-        [self performSelector:@selector(createInitialTab) withObject:nil afterDelay:0.1];
-        
+        // The tab bar's "+" appears once we implement newWindowForTab:
+        // No need to create an extra tab.
+
         // Setup a main menu for tab creation keyboard shortcut
         [self setupMainMenu];
 
@@ -71,13 +70,6 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
         [self setupToolbar];
     }
     return self;
-}
-
-// Create an initial tab to make the tab bar appear
-- (void)createInitialTab {
-    // Create a temporary window and add it as a tab to force the tab bar to appear
-    // This is a workaround for macOS versions where tabGroup.isTabBarVisible isn't available
-    [self newTab:nil];
 }
 
 // Set up the NSSplitViewController with sidebar and content panes.
@@ -138,44 +130,20 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
     // Add New Tab item to the File menu
     NSMenu* fileMenu = [fileMenuItem submenu];
     NSMenuItem* newTabItem = [[NSMenuItem alloc] initWithTitle:@"New Tab" 
-                                                       action:@selector(newTab:) 
+                                                       action:@selector(newWindowForTab:) 
                                                 keyEquivalent:@"t"];
     [newTabItem setTarget:self];
     [fileMenu insertItem:newTabItem atIndex:0]; // Add at the top of the File menu
-    
-    // Add a separator after the New Tab item
-    [fileMenu insertItem:[NSMenuItem separatorItem] atIndex:1];
 }
 
-// Action to create a new tab
-- (void)newTab:(id)sender {
-    // Create content for the new tab - use the same setup as the initial window
-    NSSplitViewController* splitVC = [[NSSplitViewController alloc] init];
-    
-    // Create the sidebar for the new tab
-    SidebarViewController* sidebarVC = [[SidebarViewController alloc] init];
-    NSSplitViewItem* sidebarItem = [NSSplitViewItem sidebarWithViewController:sidebarVC];
-    sidebarItem.minimumThickness = 180;
-    sidebarItem.maximumThickness = 400;
-    sidebarItem.canCollapse = YES;
-    sidebarItem.allowsFullHeightLayout = YES;
-    [splitVC addSplitViewItem:sidebarItem];
-    
-    // Create the content area for the new tab
-    ContentViewController* contentVC = [[ContentViewController alloc] init];
-    NSSplitViewItem* contentItem = [NSSplitViewItem splitViewItemWithViewController:contentVC];
-    contentItem.minimumThickness = 300;
-    [splitVC addSplitViewItem:contentItem];
-    
-    // Create a temporary window to hold the new tab content
-    NSWindow* newTabWindow = [[NSWindow alloc] initWithContentRect:self.window.frame
-                                                        styleMask:self.window.styleMask
-                                                          backing:NSBackingStoreBuffered
-                                                            defer:YES];
-    newTabWindow.contentViewController = splitVC;
-    
-    // Add it as a tab to the current window
-    [self.window addTabbedWindow:newTabWindow ordered:NSWindowAbove];
+// Implementation for the native "+" button / Cmd+T / File > New Tab
+- (void)newWindowForTab:(id)sender {
+    // Create a fresh window controller for the new tab.
+    MainWindowController* wc = [[MainWindowController alloc] init];
+    // Ensure the new window has a reference to its controller in responder chain.
+    wc.window.windowController = wc;
+    // Add as new tab.
+    [self.window addTabbedWindow:wc.window ordered:NSWindowAbove];
 }
 
 // Set up the NSToolbar with standard sidebar controls.
@@ -203,8 +171,7 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
     return @[
         kToggleSidebarItemIdentifier,
         kSidebarTrackingSeparatorItemIdentifier,
-        NSToolbarFlexibleSpaceItemIdentifier,
-        kNewTabItemIdentifier
+        NSToolbarFlexibleSpaceItemIdentifier
     ];
 }
 
@@ -214,8 +181,7 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
     return @[
         kToggleSidebarItemIdentifier,
         kSidebarTrackingSeparatorItemIdentifier,
-        NSToolbarFlexibleSpaceItemIdentifier,
-        kNewTabItemIdentifier
+        NSToolbarFlexibleSpaceItemIdentifier
     ];
 }
 
@@ -248,16 +214,6 @@ static const NSToolbarItemIdentifier kNewTabItemIdentifier = @"NewTabItem";
         toolbarItem.view = separatorView;
         toolbarItem.label = @"Sidebar Separator";
         toolbarItem.paletteLabel = @"Sidebar Separator";
-    }
-    else if ([itemIdentifier isEqual:kNewTabItemIdentifier]) {
-        // Create a new tab button
-        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
-        toolbarItem.label = @"New Tab";
-        toolbarItem.paletteLabel = @"New Tab";
-        toolbarItem.toolTip = @"Create a new tab";
-        toolbarItem.image = [NSImage imageNamed:NSImageNameAddTemplate];
-        toolbarItem.target = self;
-        toolbarItem.action = @selector(newTab:);
     }
     
     // Return the created item (or nil if identifier is unknown).
