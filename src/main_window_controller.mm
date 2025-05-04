@@ -54,7 +54,7 @@ static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
         window.titlebarAppearsTransparent = YES;      // Allow content under titlebar
 
         // Enable native window tabbing.
-        window.tabbingMode = NSWindowTabbingModePreferred;
+        window.tabbingMode = NSWindowTabbingModeAutomatic; // Force tab bar to always show
         window.tabbingIdentifier = @"MainWindowTabs"; // Group windows of this type
         
         // The tab bar's "+" appears once we implement newWindowForTab:
