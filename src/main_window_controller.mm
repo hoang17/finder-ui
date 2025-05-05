@@ -10,7 +10,11 @@ static const NSToolbarItemIdentifier kToggleSidebarItemIdentifier =
     @"NSToolbarToggleSidebarItemIdentifier"; // Fixed identifier
 static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
     @"NSToolbarSidebarTrackingSeparatorItemIdentifier"; // Fixed identifier
-// Removed custom new tab toolbar item; rely on native "+" button instead.
+static const NSToolbarItemIdentifier kBackForwardItemIdentifier = @"BackForwardItem";
+static const NSToolbarItemIdentifier kAddressBarItemIdentifier = @"AddressBarItem";
+static const NSToolbarItemIdentifier kReloadItemIdentifier = @"ReloadItem";
+static const NSToolbarItemIdentifier kShareItemIdentifier = @"ShareItem";
+static const NSToolbarItemIdentifier kBookmarksItemIdentifier = @"BookmarksItem";
 
 @interface MainWindowController ()
 
@@ -22,6 +26,13 @@ static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
 - (void)newWindowForTab:(id)sender;
 // Helper to ensure File > New Tab exists
 - (void)setupMainMenu;
+// Action methods for toolbar items
+- (void)backForwardAction:(NSSegmentedControl*)sender;
+- (void)goBack:(id)sender;
+- (void)goForward:(id)sender;
+- (void)reload:(id)sender;
+- (void)share:(id)sender;
+- (void)showBookmarks:(id)sender;
 
 @end
 
@@ -146,18 +157,17 @@ static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
     [self.window addTabbedWindow:wc.window ordered:NSWindowAbove];
 }
 
-// Set up the NSToolbar with standard sidebar controls.
+// Set up the NSToolbar with Safari-like controls.
 - (void)setupToolbar {
     NSToolbar* toolbar = [[NSToolbar alloc] initWithIdentifier:kMainToolbarIdentifier];
-    toolbar.delegate = self; // This controller will provide toolbar items.
-    toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-    toolbar.allowsUserCustomization = NO; // Typically false for this style
+    toolbar.delegate = self;
+    toolbar.displayMode = NSToolbarDisplayModeIconAndLabel; // Show both icons and labels
+    toolbar.allowsUserCustomization = YES; // Allow users to customize the toolbar
 
     // Assign the toolbar to the window.
     self.window.toolbar = toolbar;
 
     // Ensure the toolbar style is unified (standard on Big Sur+).
-    // Redundant if using NSWindowStyleMaskUnifiedTitleAndToolbar, but safe to set.
     if (@available(macOS 11.0, *)) {
         self.window.toolbarStyle = NSWindowToolbarStyleUnified;
     }
@@ -167,20 +177,29 @@ static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
 
 // Returns the identifiers for items allowed in the toolbar.
 - (NSArray<NSToolbarItemIdentifier>*)toolbarAllowedItemIdentifiers:(NSToolbar*)toolbar {
-    // Define all possible items, including system and custom ones.
     return @[
         kToggleSidebarItemIdentifier,
         kSidebarTrackingSeparatorItemIdentifier,
-        NSToolbarFlexibleSpaceItemIdentifier
+        kBackForwardItemIdentifier,
+        kAddressBarItemIdentifier,
+        kReloadItemIdentifier,
+        kShareItemIdentifier,
+        kBookmarksItemIdentifier,
+        NSToolbarFlexibleSpaceItemIdentifier,
+        NSToolbarSpaceItemIdentifier
     ];
 }
 
 // Returns the identifiers for items included in the toolbar by default.
 - (NSArray<NSToolbarItemIdentifier>*)toolbarDefaultItemIdentifiers:(NSToolbar*)toolbar {
-    // Define the standard layout: toggle, separator, flexible space (pushes items right).
     return @[
         kToggleSidebarItemIdentifier,
         kSidebarTrackingSeparatorItemIdentifier,
+        kBackForwardItemIdentifier,
+        kAddressBarItemIdentifier,
+        kReloadItemIdentifier,
+        kShareItemIdentifier,
+        kBookmarksItemIdentifier,
         NSToolbarFlexibleSpaceItemIdentifier
     ];
 }
@@ -192,32 +211,119 @@ static const NSToolbarItemIdentifier kSidebarTrackingSeparatorItemIdentifier =
 
     NSToolbarItem* toolbarItem = nil;
 
-    // Handle the standard system toggle sidebar item.
     if ([itemIdentifier isEqual:kToggleSidebarItemIdentifier]) {
-        // Use the standard constructor; AppKit handles the icon, action, and target.
         toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
-        // No need to set image, target, or action manually.
-        toolbarItem.label = @"Toggle Sidebar"; // Tooltip
+        toolbarItem.label = @"Toggle Sidebar";
         toolbarItem.paletteLabel = @"Toggle Sidebar";
         toolbarItem.toolTip = @"Show/Hide Sidebar";
     }
-    // Handle the standard system sidebar tracking separator item.
     else if ([itemIdentifier isEqual:kSidebarTrackingSeparatorItemIdentifier]) {
-        // Create a regular toolbar item for the separator
         toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
-        
-        // Create a separator view
         NSBox* separatorView = [[NSBox alloc] initWithFrame:NSMakeRect(0, 0, 1, 24)];
         separatorView.boxType = NSBoxSeparator;
-        
-        // Set the separator view as the toolbar item's view
         toolbarItem.view = separatorView;
         toolbarItem.label = @"Sidebar Separator";
         toolbarItem.paletteLabel = @"Sidebar Separator";
     }
+    else if ([itemIdentifier isEqual:kBackForwardItemIdentifier]) {
+        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        
+        // Create a segmented control for back/forward
+        NSSegmentedControl* segmentedControl = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(0, 0, 80, 24)];
+        segmentedControl.segmentCount = 2;
+        [segmentedControl setImage:[NSImage imageWithSystemSymbolName:@"chevron.left" accessibilityDescription:nil] forSegment:0];
+        [segmentedControl setImage:[NSImage imageWithSystemSymbolName:@"chevron.right" accessibilityDescription:nil] forSegment:1];
+        [segmentedControl setTarget:self];
+        [segmentedControl setAction:@selector(backForwardAction:)];
+        
+        toolbarItem.view = segmentedControl;
+        toolbarItem.label = @"Back/Forward";
+        toolbarItem.paletteLabel = @"Back/Forward";
+    }
+    else if ([itemIdentifier isEqual:kAddressBarItemIdentifier]) {
+        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        
+        // Create a search field for the address bar
+        NSSearchField* searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0, 0, 300, 24)];
+        searchField.placeholderString = @"Search or enter website name";
+        
+        toolbarItem.view = searchField;
+        toolbarItem.label = @"Address";
+        toolbarItem.paletteLabel = @"Address";
+        toolbarItem.minSize = NSMakeSize(200, 24);
+        toolbarItem.maxSize = NSMakeSize(500, 24);
+    }
+    else if ([itemIdentifier isEqual:kReloadItemIdentifier]) {
+        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        
+        NSButton* button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 24, 24)];
+        button.bezelStyle = NSBezelStyleRegularSquare;
+        button.image = [NSImage imageWithSystemSymbolName:@"arrow.clockwise" accessibilityDescription:nil];
+        button.target = self;
+        button.action = @selector(reload:);
+        
+        toolbarItem.view = button;
+        toolbarItem.label = @"Reload";
+        toolbarItem.paletteLabel = @"Reload";
+    }
+    else if ([itemIdentifier isEqual:kShareItemIdentifier]) {
+        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        
+        NSButton* button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 24, 24)];
+        button.bezelStyle = NSBezelStyleRegularSquare;
+        button.image = [NSImage imageWithSystemSymbolName:@"square.and.arrow.up" accessibilityDescription:nil];
+        button.target = self;
+        button.action = @selector(share:);
+        
+        toolbarItem.view = button;
+        toolbarItem.label = @"Share";
+        toolbarItem.paletteLabel = @"Share";
+    }
+    else if ([itemIdentifier isEqual:kBookmarksItemIdentifier]) {
+        toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        
+        NSButton* button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 24, 24)];
+        button.bezelStyle = NSBezelStyleRegularSquare;
+        button.image = [NSImage imageWithSystemSymbolName:@"book" accessibilityDescription:nil];
+        button.target = self;
+        button.action = @selector(showBookmarks:);
+        
+        toolbarItem.view = button;
+        toolbarItem.label = @"Bookmarks";
+        toolbarItem.paletteLabel = @"Bookmarks";
+    }
     
-    // Return the created item (or nil if identifier is unknown).
     return toolbarItem;
+}
+
+#pragma mark - Toolbar Actions
+
+- (void)backForwardAction:(NSSegmentedControl*)sender {
+    if (sender.selectedSegment == 0) {
+        [self goBack:sender];
+    } else {
+        [self goForward:sender];
+    }
+}
+
+- (void)goBack:(id)sender {
+    // TODO: Implement back navigation
+}
+
+- (void)goForward:(id)sender {
+    // TODO: Implement forward navigation
+}
+
+- (void)reload:(id)sender {
+    // TODO: Implement reload functionality
+}
+
+- (void)share:(id)sender {
+    // TODO: Implement share functionality
+}
+
+- (void)showBookmarks:(id)sender {
+    // TODO: Implement bookmarks functionality
 }
 
 @end 
